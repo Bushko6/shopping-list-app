@@ -1,0 +1,118 @@
+# Student Project Support System — Claude Code Context
+
+## Project summary
+
+An **in-memory** Student Project Support System written in **Python 3.12**.
+No databases, no network, no file I/O. All persistence lives in plain Python dicts/lists.
+
+## Directory layout
+
+```
+src/
+  models/    — pure data entities (Student, Team, Project, Milestone, Submission, Penalty, QueueRequest)
+  storage/   — ABC repository interfaces + InMemory implementations
+  services/  — business logic (ProjectService, MilestoneService, TeamService, MembershipService, …)
+  utils/     — shared helpers, domain exceptions, EventBus, DI container
+tests/
+  unit/        — isolated tests with mocks
+  integration/ — full-stack tests using real in-memory repos
+docs/diagrams/ — UML / architecture diagrams
+```
+
+## Hard constraints
+
+- **No concrete repo/strategy without its ABC first.** Define the `abc.ABC` interface before writing any implementation.
+- **TDD only.** Write the failing test, then the implementation — never the other way around.
+- **No external I/O.** No databases, HTTP calls, file reads, or third-party APIs anywhere in `src/`.
+- **Constructor injection.** All dependencies are passed via `__init__`. No `import`-time instantiation of collaborators.
+
+## Architecture
+
+Dependency direction (one way only):
+
+```
+services  →  storage interfaces (ABC)  ←  storage implementations
+services  →  models
+services  →  utils
+storage   →  models
+```
+
+`models/` imports nothing from this project. `utils/` imports nothing from `services/` or `storage/`.
+
+## Required design patterns
+
+| Pattern | Where |
+|---|---|
+| Strategy | `PenaltyStrategy` ABC + concrete strategies; injected into `MilestoneService` |
+| Observer | `EventBus` in `services/events.py`; `MilestoneService` fires `MilestoneStatusChangedEvent`; `TeamService` fires `TeamSpotAvailableEvent` |
+
+## Quality targets
+
+| Metric | Target |
+|---|---|
+| Branch coverage | >= 85% |
+| Total tests | >= 200 |
+| Bugs / vulnerabilities | 0 |
+| Maintainability | A or B |
+
+## Test toolchain
+
+```
+pytest >= 8
+pytest-cov >= 5
+pytest-mock >= 3.14
+```
+
+Run all tests with coverage:
+
+```bash
+pytest --cov=src --cov-branch --cov-report=term-missing
+```
+
+Full CI report (produces `coverage.xml`, `junit.xml`, `htmlcov/`):
+
+```bash
+pytest \
+  --cov=src --cov-branch \
+  --cov-report=term-missing \
+  --cov-report=xml:coverage.xml \
+  --cov-report=html:htmlcov \
+  --junitxml=junit.xml
+```
+
+## Naming conventions
+
+- Test functions: `test_<method>_<scenario>_<expected_outcome>`
+- Repository interface: `StudentRepository` (ABC in `storage/interfaces.py`)
+- In-memory impl: `InMemoryStudentRepository` (in `storage/memory/student_repo.py`)
+- Domain exceptions: defined in `utils/exceptions.py`, e.g. `StudentNotFoundError`
+
+## SOLID reminders
+
+- **S** — each class has one reason to change.
+- **O** — extend via new strategy/observer implementations, not `if` chains.
+- **L** — every in-memory repo must be substitutable for its ABC.
+- **I** — keep repository ABCs focused; don't bloat with unused methods.
+- **D** — services depend on ABC interfaces, never on concrete classes.
+
+## Skills
+
+Claude Code skills live in `.claude/skills/` and are loaded **on demand** — invoke them
+when the task explicitly touches their domain:
+
+| Skill | File | When to load |
+|---|---|---|
+| `architecture` | `.claude/skills/architecture/SKILL.md` | Creating or modifying models, repos, or services; deciding which layer new code belongs to. |
+| `testing` | `.claude/skills/testing/SKILL.md` | Writing, modifying, or reviewing tests; configuring coverage reports. |
+
+The skills complement but do **not** replace the always-on rules:
+
+- `.cursorrules` — condensed hard rules loaded automatically by Cursor on every prompt.
+- `.cursor/rules/architecture.md` — full layer and pattern description (always-on).
+- `.cursor/rules/testing.md` / `.cursor/rules/testing_strategy.md` — TDD and coverage guide (always-on).
+
+## See also
+
+- `.cursorrules` — condensed hard rules for AI agents.
+- `.cursor/rules/architecture.md` — full layer and pattern description.
+- `.cursor/rules/testing.md` / `.cursor/rules/testing_strategy.md` — TDD and coverage guide.
