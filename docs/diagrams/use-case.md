@@ -20,7 +20,6 @@ graph LR
     System --> UC6
 
     UC3 -.->|"«extend»\nall items purchased"| UC6
-    UC5 -.->|"«include»"| UC1
 ```
 
 ## Actors

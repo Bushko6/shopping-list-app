@@ -1,7 +1,9 @@
 from datetime import datetime
+from typing import Optional
 from storage.interfaces import ShoppingItemRepository
 from models.shopping_item import ShoppingItem
 from services.sort_strategies import SortStrategy
+from services.observer import ShoppingListSubject, ItemEvent, EventType
 from utils.exceptions import ShoppingItemNotFoundError, ItemAlreadyPurchasedError, ItemNotPurchasedError
 
 
@@ -10,9 +12,22 @@ class ShoppingItemService:
         self,
         item_repo: ShoppingItemRepository,
         sort_strategy: SortStrategy,
+        subject: Optional[ShoppingListSubject] = None,
     ) -> None:
         self._item_repo = item_repo
         self._sort_strategy = sort_strategy
+        self._subject = subject
+
+    def _check_completion(self, list_id: str) -> None:
+        if self._subject is None:
+            return
+        remaining = self._item_repo.find_by_list(list_id)
+        if remaining and all(i.is_purchased for i in remaining):
+            self._subject.notify(ItemEvent(
+                type=EventType.LIST_COMPLETED,
+                list_id=list_id,
+                item_id=None,
+            ))
 
     def mark_purchased(self, item_id: str) -> ShoppingItem:
         item = self._item_repo.get_by_id(item_id)
@@ -23,6 +38,7 @@ class ShoppingItemService:
         item.is_purchased = True
         item.purchased_at = datetime.now()
         self._item_repo.update(item)
+        self._check_completion(item.list_id)
         return item
 
     def unmark_purchased(self, item_id: str) -> ShoppingItem:
@@ -45,6 +61,8 @@ class ShoppingItemService:
                 item.purchased_at = datetime.now()
                 self._item_repo.update(item)
                 marked.append(item)
+        if marked:
+            self._check_completion(list_id)
         return marked
 
     def get_items_sorted(self, list_id: str) -> list[ShoppingItem]:

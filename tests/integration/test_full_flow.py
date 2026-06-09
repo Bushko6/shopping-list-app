@@ -36,7 +36,7 @@ def _wire():
     subject = ShoppingListSubject()
     subject.subscribe(ListCompletionObserver(log))
     list_svc = ShoppingListService(list_repo, item_repo, subject)
-    item_svc = ShoppingItemService(item_repo, AlphabeticalSortStrategy())
+    item_svc = ShoppingItemService(item_repo, AlphabeticalSortStrategy(), subject)
     notif_svc = NotificationService(log)
     return list_svc, item_svc, notif_svc, subject, log
 
@@ -168,41 +168,22 @@ def test_all_purchased_triggers_list_completed_event():
     subject.subscribe(mock_obs)
     list_svc.create_list("l1", "Weekly", "u1")
     list_svc.add_item("l1", "i1", "Milk", 1.0)
-    item_svc.mark_purchased("i1")
     list_svc.add_item("l1", "i2", "Bread", 1.0)
+    item_svc.mark_purchased("i1")
     item_svc.mark_purchased("i2")
-    # After second item is purchased the _check_completion fires
-    # We need to trigger via list_svc which calls _check_completion
-    # Actually mark_purchased is on item_svc so won't trigger.
-    # Use bulk_mark_purchased which doesn't fire observer either.
-    # Let's test the observer fires when list_svc.add_item is called and all are purchased.
-    assert any(e.type == EventType.ITEM_ADDED for e in captured)
+    assert any(e.type == EventType.LIST_COMPLETED for e in captured)
 
 
 def test_list_completed_notification_logged():
-    list_repo = InMemoryShoppingListRepository()
-    item_repo = InMemoryShoppingItemRepository()
-    log = NotificationLog()
-    subject = ShoppingListSubject()
-    subject.subscribe(ListCompletionObserver(log))
-    list_svc = ShoppingListService(list_repo, item_repo, subject)
-    item_svc = ShoppingItemService(item_repo, AlphabeticalSortStrategy())
-
+    list_svc, item_svc, notif_svc, *_ = _wire()
     list_svc.create_list("l1", "Weekly", "u1")
-    # Add item, mark purchased, then add another that's also purchased to trigger
-    item = list_svc.add_item("l1", "i1", "Milk", 1.0)
-    item.is_purchased = True
-    item_repo.update(item)
-    # Adding a purchased item won't trigger _check_completion automatically via add_item
-    # because add_item creates a new (unpurchased) item.
-    # Directly test _check_completion by removing the last item once all are purchased:
-    item2 = list_svc.add_item("l1", "i2", "Bread", 1.0)
-    item2.is_purchased = True
-    item_repo.update(item2)
-    list_svc.remove_item("i2")
-    # After remove, find_by_list returns [item1 which is purchased] → LIST_COMPLETED
-    notifications = log.get_notifications("l1")
-    assert any("l1" in n for n in notifications)
+    list_svc.add_item("l1", "i1", "Milk", 1.0)
+    list_svc.add_item("l1", "i2", "Bread", 1.0)
+    item_svc.mark_purchased("i1")
+    item_svc.mark_purchased("i2")
+    notifications = notif_svc.get_notifications("l1")
+    assert len(notifications) == 1
+    assert "l1" in notifications[0]
 
 
 def test_partial_purchase_no_list_completed_notification():
@@ -285,7 +266,7 @@ def test_get_unpurchased_returns_only_unpurchased():
 
 
 def test_bulk_mark_purchased_marks_all_in_list():
-    list_svc, item_svc, *_ = _wire()
+    list_svc, item_svc, notif_svc, *_ = _wire()
     list_svc.create_list("l1", "Weekly", "u1")
     list_svc.add_item("l1", "i1", "Milk", 1.0)
     list_svc.add_item("l1", "i2", "Bread", 1.0)
@@ -293,6 +274,7 @@ def test_bulk_mark_purchased_marks_all_in_list():
     result = item_svc.bulk_mark_purchased("l1")
     assert len(result) == 3
     assert all(i.is_purchased for i in item_svc.get_items_sorted("l1"))
+    assert len(notif_svc.get_notifications("l1")) == 1
 
 
 def test_bulk_mark_purchased_only_marks_unpurchased():
@@ -309,24 +291,15 @@ def test_bulk_mark_purchased_only_marks_unpurchased():
 # ── notification service ──────────────────────────────────────────────────────
 
 def test_notification_service_returns_messages_for_list():
-    list_repo = InMemoryShoppingListRepository()
-    item_repo = InMemoryShoppingItemRepository()
-    log = NotificationLog()
-    subject = ShoppingListSubject()
-    subject.subscribe(ListCompletionObserver(log))
-    list_svc = ShoppingListService(list_repo, item_repo, subject)
-    notif_svc = NotificationService(log)
-
+    list_svc, item_svc, notif_svc, *_ = _wire()
     list_svc.create_list("l1", "Weekly", "u1")
-    item1 = list_svc.add_item("l1", "i1", "Milk", 1.0)
-    item2 = list_svc.add_item("l1", "i2", "Bread", 1.0)
-    # Mark i1 purchased, then remove i2 → remaining=[i1(purchased)] → LIST_COMPLETED fires
-    item1.is_purchased = True
-    item_repo.update(item1)
-    list_svc.remove_item("i2")
-
+    list_svc.add_item("l1", "i1", "Milk", 1.0)
+    list_svc.add_item("l1", "i2", "Bread", 1.0)
+    item_svc.mark_purchased("i1")
+    item_svc.mark_purchased("i2")
     msgs = notif_svc.get_notifications("l1")
-    assert len(msgs) >= 1
+    assert len(msgs) == 1
+    assert "l1" in msgs[0]
 
 
 def test_notification_service_all_notifications_empty_initially():

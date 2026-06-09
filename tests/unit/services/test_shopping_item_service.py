@@ -152,3 +152,79 @@ def test_get_unpurchased_delegates_to_repo(svc, deps):
 def test_get_unpurchased_empty_returns_empty(svc, deps):
     deps["item_repo"].find_unpurchased_by_list.return_value = []
     assert svc.get_unpurchased("l1") == []
+
+
+# ── _check_completion (subject wired) ─────────────────────────────────────────
+
+def _make_svc_with_subject():
+    from unittest.mock import MagicMock
+    from services.observer import ShoppingListSubject, EventType
+    item_repo = MagicMock()
+    subject = MagicMock(spec=ShoppingListSubject)
+    svc = ShoppingItemService(item_repo=item_repo,
+                              sort_strategy=AlphabeticalSortStrategy(),
+                              subject=subject)
+    return svc, item_repo, subject
+
+
+def test_mark_purchased_fires_list_completed_when_all_purchased():
+    from services.observer import EventType
+    svc, item_repo, subject = _make_svc_with_subject()
+    item_repo.get_by_id.return_value = _make_item(id="i1", is_purchased=False)
+    item_repo.find_by_list.return_value = [_make_item(id="i1", is_purchased=True)]
+    svc.mark_purchased("i1")
+    event = subject.notify.call_args[0][0]
+    assert event.type == EventType.LIST_COMPLETED
+    assert event.list_id == "l1"
+
+
+def test_mark_purchased_no_completion_when_another_item_unpurchased():
+    from services.observer import EventType
+    svc, item_repo, subject = _make_svc_with_subject()
+    item_repo.get_by_id.return_value = _make_item(id="i1", is_purchased=False)
+    item_repo.find_by_list.return_value = [
+        _make_item(id="i1", is_purchased=True),
+        _make_item(id="i2", is_purchased=False),
+    ]
+    svc.mark_purchased("i1")
+    subject.notify.assert_not_called()
+
+
+def test_mark_purchased_no_subject_does_not_raise():
+    item_repo = MagicMock()
+    svc = ShoppingItemService(item_repo=item_repo,
+                              sort_strategy=AlphabeticalSortStrategy())
+    item_repo.get_by_id.return_value = _make_item(id="i1", is_purchased=False)
+    item_repo.find_by_list.return_value = [_make_item(id="i1", is_purchased=True)]
+    svc.mark_purchased("i1")  # must not raise
+
+
+def test_bulk_mark_purchased_fires_list_completed():
+    from services.observer import EventType
+    svc, item_repo, subject = _make_svc_with_subject()
+    item_repo.find_by_list.side_effect = [
+        [_make_item(id="i1", is_purchased=False),
+         _make_item(id="i2", is_purchased=False)],
+        [_make_item(id="i1", is_purchased=True),
+         _make_item(id="i2", is_purchased=True)],
+    ]
+    svc.bulk_mark_purchased("l1")
+    event = subject.notify.call_args[0][0]
+    assert event.type == EventType.LIST_COMPLETED
+
+
+def test_bulk_mark_purchased_no_completion_when_none_newly_marked():
+    svc, item_repo, subject = _make_svc_with_subject()
+    item_repo.find_by_list.return_value = [
+        _make_item(id="i1", is_purchased=True),
+    ]
+    svc.bulk_mark_purchased("l1")
+    subject.notify.assert_not_called()
+
+
+def test_bulk_mark_purchased_no_subject_does_not_raise():
+    item_repo = MagicMock()
+    svc = ShoppingItemService(item_repo=item_repo,
+                              sort_strategy=AlphabeticalSortStrategy())
+    item_repo.find_by_list.return_value = [_make_item(id="i1", is_purchased=False)]
+    svc.bulk_mark_purchased("l1")  # must not raise

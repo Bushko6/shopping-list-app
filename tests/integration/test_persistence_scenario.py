@@ -259,7 +259,6 @@ def test_full_save_create_new_service_load_data_matches(tmp_path):
     list_repo1 = JsonFileShoppingListRepository(list_path)
     item_repo1 = JsonFileShoppingItemRepository(item_path)
     svc1 = _make_list_svc(list_repo1, item_repo1)
-    item_svc1 = ShoppingItemService(item_repo1, AlphabeticalSortStrategy())
     svc1.create_list("l1", "Weekly", "u1")
     svc1.add_item("l1", "i1", "Milk", 2.0, price=1.99)
     svc1.add_item("l1", "i2", "Bread", 1.0, price=2.50)
