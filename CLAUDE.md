@@ -1,17 +1,17 @@
-# Student Project Support System — Claude Code Context
+# Shopping List App — Claude Code Context
 
 ## Project summary
 
-An **in-memory** Student Project Support System written in **Python 3.12**.
+An **in-memory** Shopping List App written in **Python 3.12**.
 No databases, no network, no file I/O. All persistence lives in plain Python dicts/lists.
 
 ## Directory layout
 
 ```
 src/
-  models/    — pure data entities (Student, Team, Project, Milestone, Submission, Penalty, QueueRequest)
+  models/    — pure data entities (User, ShoppingList, Item, Category, Purchase, BudgetEntry, InviteRequest)
   storage/   — ABC repository interfaces + InMemory implementations
-  services/  — business logic (ProjectService, MilestoneService, TeamService, MembershipService, …)
+  services/  — business logic (ListService, ItemService, ShareService, UserService, …)
   utils/     — shared helpers, domain exceptions, EventBus, DI container
 tests/
   unit/        — isolated tests with mocks
@@ -43,8 +43,8 @@ storage   →  models
 
 | Pattern | Where |
 |---|---|
-| Strategy | `PenaltyStrategy` ABC + concrete strategies; injected into `MilestoneService` |
-| Observer | `EventBus` in `services/events.py`; `MilestoneService` fires `MilestoneStatusChangedEvent`; `TeamService` fires `TeamSpotAvailableEvent` |
+| Strategy | `SortingStrategy` ABC + concrete strategies; injected into `ItemService` |
+| Observer | `EventBus` in `services/events.py`; `ListService` fires `ListStatusChangedEvent`; `ShareService` fires `ListSpotAvailableEvent` |
 
 ## Quality targets
 
@@ -83,9 +83,9 @@ pytest \
 ## Naming conventions
 
 - Test functions: `test_<method>_<scenario>_<expected_outcome>`
-- Repository interface: `StudentRepository` (ABC in `storage/interfaces.py`)
-- In-memory impl: `InMemoryStudentRepository` (in `storage/memory/student_repo.py`)
-- Domain exceptions: defined in `utils/exceptions.py`, e.g. `StudentNotFoundError`
+- Repository interface: `UserRepository` (ABC in `storage/interfaces.py`)
+- In-memory impl: `InMemoryUserRepository` (in `storage/memory/user_repo.py`)
+- Domain exceptions: defined in `utils/exceptions.py`, e.g. `UserNotFoundError`
 
 ## SOLID reminders
 

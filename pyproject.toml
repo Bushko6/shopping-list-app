@@ -1,6 +1,6 @@
 [project]
-name = "library-system"
-version = "1.0.0"
+name = "shopping-list-app"
+version = "1.1.0"
 requires-python = ">=3.12"
 
 [project.optional-dependencies]

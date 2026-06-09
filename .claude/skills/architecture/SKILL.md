@@ -1,6 +1,6 @@
 ---
 name: architecture
-description: In-memory layered architecture of the Student Project Support System. Use when creating or modifying models, repository interfaces or services, or deciding which layer new code belongs to.
+description: In-memory layered architecture of the Shopping List App. Use when creating or modifying models, repository interfaces or services, or deciding which layer new code belongs to.
 ---
 
 ## Layer order
@@ -29,7 +29,7 @@ Dependencies flow in one direction only — no layer imports from a layer above 
 | Business rule / workflow | `services/` |
 | Domain exception | `utils/exceptions.py` |
 | Event or observer ABC | `services/events.py` |
-| Penalty algorithm variant | `services/penalty_strategies.py` |
+| Sorting algorithm variant | `services/sorting_strategies.py` |
 
 For the full entity list, pattern locations, and dependency diagram see
 [`reference.md`](reference.md) in this folder.

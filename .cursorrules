@@ -1,4 +1,4 @@
-# AI Agent Rules — Student Project Support System
+# AI Agent Rules — Shopping List App
 
 ## Hard constraints (never violate)
 - NEVER write a concrete repository or strategy class without first defining its interface as an abc.ABC.
@@ -14,4 +14,4 @@
 ## Design
 - Layers: models (entities) -> storage (ABC repositories + in-memory impl) -> services (business logic).
 - Apply SOLID. Functions must be small, typed, documented, duplication-free.
-- Required GoF patterns: Strategy (penalty calculation), Observer (milestone status + team spot notifications).
+- Required GoF patterns: Strategy (item sorting), Observer (list status + share-spot notifications).

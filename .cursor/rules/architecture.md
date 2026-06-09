@@ -1,4 +1,4 @@
-# Architecture — In-Memory Student Project Support System
+# Architecture — In-Memory Shopping List App
 
 ## Layer overview
 
@@ -15,17 +15,17 @@ Each layer depends only on the layer to its left via abstractions, never on conc
 **Responsibility:** pure data — no business logic, no I/O.
 
 Contains dataclass entities:
-- `Student` — id, name, role (LEADER/MEMBER), is_blocked, active_projects_count, missed_deadlines_count
-- `Team` — id, name, capacity, member_ids
-- `Project` — id, title, description, status (DRAFT/ACTIVE/COMPLETED/ARCHIVED), team_id, created_at
-- `Milestone` — id, project_id, title, due_date, status (PENDING/SUBMITTED/LATE/MISSED), submitted_at
-- `Submission` — id, milestone_id, team_id, submitted_at
-- `Penalty` — id, student_id, milestone_id, points, is_resolved
-- `QueueRequest` — id, student_id, team_id, created_at, expires_at, status (PENDING/FULFILLED/EXPIRED/CANCELLED)
+- `User` — id, name, email, is_active, active_lists_count, overdue_items_count
+- `ShoppingList` — id, title, owner_id, status (DRAFT/ACTIVE/COMPLETED/ARCHIVED), created_at
+- `Item` — id, list_id, name, quantity, unit, category_id, status (PENDING/PURCHASED/SKIPPED), price, added_at
+- `Category` — id, name, color
+- `Purchase` — id, item_id, list_id, purchased_by, purchased_at, actual_price
+- `BudgetEntry` — id, user_id, list_id, amount, is_settled
+- `InviteRequest` — id, user_id, list_id, created_at, expires_at, status (PENDING/FULFILLED/EXPIRED/CANCELLED)
 
 Rules:
 - All fields are typed.
-- Validation (e.g. negative counts, empty id) raises `ValueError` in `__post_init__`, not a service exception.
+- Validation (e.g. negative quantities, empty id) raises `ValueError` in `__post_init__`, not a service exception.
 - No imports from `storage` or `services`.
 
 ---
@@ -40,13 +40,13 @@ Rules:
 storage/
   interfaces.py                  # abc.ABC repository contracts
   memory/
-    student_repo.py
-    team_repo.py
-    project_repo.py
-    milestone_repo.py
-    submission_repo.py
-    penalty_repo.py
-    queue_request_repo.py
+    user_repo.py
+    shopping_list_repo.py
+    item_repo.py
+    category_repo.py
+    purchase_repo.py
+    budget_entry_repo.py
+    invite_request_repo.py
 ```
 
 ### Repository interfaces (interfaces.py)
@@ -54,31 +54,31 @@ storage/
 Every repository is an `abc.ABC` with `@abstractmethod` operations:
 
 ```python
-class StudentRepository(ABC):
+class UserRepository(ABC):
     @abstractmethod
-    def add(self, student: Student) -> None: ...
+    def add(self, user: User) -> None: ...
     @abstractmethod
-    def get_by_id(self, student_id: str) -> Student | None: ...
+    def get_by_id(self, user_id: str) -> User | None: ...
     @abstractmethod
-    def list_all(self) -> list[Student]: ...
+    def list_all(self) -> list[User]: ...
     @abstractmethod
-    def update(self, student: Student) -> None: ...
+    def update(self, user: User) -> None: ...
     @abstractmethod
-    def delete(self, student_id: str) -> None: ...
+    def delete(self, user_id: str) -> None: ...
 ```
 
 The same CRUD pattern applies to all seven repositories. Specialised query methods
-(e.g. `find_pending_by_team`, `total_unresolved_by_student`, `find_overdue`) are
+(e.g. `find_pending_by_list`, `total_unsettled_by_user`, `find_overdue`) are
 declared on the relevant ABCs only — Interface Segregation in practice.
 
 ### In-memory implementations
 
-Concrete classes (e.g. `InMemoryStudentRepository(StudentRepository)`) store data in
-`dict[str, Student]`. They import only from `models/`; they have no knowledge of services.
+Concrete classes (e.g. `InMemoryUserRepository(UserRepository)`) store data in
+`dict[str, User]`. They import only from `models/`; they have no knowledge of services.
 
 **Why ABCs decouple services from storage:**
-Services receive a `StudentRepository` (the ABC) via constructor injection. The service
-never calls `InMemoryStudentRepository()` directly. This means:
+Services receive a `UserRepository` (the ABC) via constructor injection. The service
+never calls `InMemoryUserRepository()` directly. This means:
 - The in-memory impl can be swapped for a SQL impl without touching services.
 - Unit tests inject a `MagicMock` that satisfies the ABC interface.
 
@@ -86,34 +86,34 @@ never calls `InMemoryStudentRepository()` directly. This means:
 
 ## services/
 
-**Responsibility:** all business logic — project lifecycle, milestone submissions, team
-membership, penalty calculation, and student blocking.
+**Responsibility:** all business logic — list lifecycle, item purchases, share
+management, budget tracking, and user deactivation.
 
 ### Key services
 
 | Service | Depends on |
 |---|---|
-| `ProjectService` | `ProjectRepository`, `TeamRepository` |
-| `MilestoneService` | `MilestoneRepository`, `SubmissionRepository`, `PenaltyRepository`, `ProjectRepository`, `TeamRepository`, `StudentRepository`, `PenaltyStrategy`, `DeadlineSubject` |
-| `TeamService` | `TeamRepository`, `StudentRepository`, `QueueRequestRepository`, `DeadlineSubject` |
-| `MembershipService` | `StudentRepository`, `PenaltyRepository` |
+| `ListService` | `ShoppingListRepository`, `UserRepository` |
+| `ItemService` | `ItemRepository`, `PurchaseRepository`, `BudgetEntryRepository`, `ShoppingListRepository`, `CategoryRepository`, `UserRepository`, `SortingStrategy`, `ListSubject` |
+| `ShareService` | `ShoppingListRepository`, `UserRepository`, `InviteRequestRepository`, `ListSubject` |
+| `UserService` | `UserRepository`, `BudgetEntryRepository` |
 
 ### Dependency Injection
 
 All dependencies are injected through `__init__`:
 
 ```python
-class MilestoneService:
+class ItemService:
     def __init__(
         self,
-        milestone_repo: MilestoneRepository,
-        submission_repo: SubmissionRepository,
-        penalty_repo: PenaltyRepository,
-        project_repo: ProjectRepository,
-        team_repo: TeamRepository,
-        student_repo: StudentRepository,
-        penalty_strategy: PenaltyStrategy,
-        event_bus: DeadlineSubject,
+        item_repo: ItemRepository,
+        purchase_repo: PurchaseRepository,
+        budget_entry_repo: BudgetEntryRepository,
+        list_repo: ShoppingListRepository,
+        category_repo: CategoryRepository,
+        user_repo: UserRepository,
+        sorting_strategy: SortingStrategy,
+        event_bus: ListSubject,
         clock: Callable[[], datetime] = datetime.now,
     ) -> None:
         ...
@@ -128,8 +128,8 @@ implementations together and is the only place that calls `InMemory*` constructo
 
 **Responsibility:** cross-cutting concerns that belong to no single layer.
 
-- `exceptions.py` — domain exception hierarchy (`StudentNotFoundError`, `TeamFullError`,
-  `InvalidStatusTransitionError`, `AlreadySubmittedError`, `DuplicateQueueRequestError`, …).
+- `exceptions.py` — domain exception hierarchy (`UserNotFoundError`, `ListFullError`,
+  `InvalidStatusTransitionError`, `AlreadyPurchasedError`, `DuplicateInviteRequestError`, …).
 
 `utils/` imports nothing from `services/` or `storage/`.
 
@@ -137,34 +137,34 @@ implementations together and is the only place that calls `InMemory*` constructo
 
 ## GoF Pattern locations
 
-### Strategy — penalty calculation
+### Strategy — item sorting
 
 ```
-services/penalty_strategies.py  → PenaltyStrategy(ABC)
-                                → FlatPenaltyStrategy
-                                → ProgressivePenaltyStrategy
-                                → WeekendExemptPenaltyStrategy
-                                → CappedPenaltyStrategy  (Decorator)
-                                → PenaltyStrategyFactory
+services/sorting_strategies.py  → SortingStrategy(ABC)
+                                → AlphabeticSortStrategy
+                                → CategorySortStrategy
+                                → StatusSortStrategy
+                                → PriceSortStrategy  (Decorator)
+                                → SortingStrategyFactory
 ```
 
-`MilestoneService` receives a `PenaltyStrategy` and calls
-`strategy.calculate(due_date, submitted_date)`. Switching the penalty policy requires
+`ItemService` receives a `SortingStrategy` and calls
+`strategy.sort(items)`. Switching the sort policy requires
 only a different strategy object at the composition root, not a code change.
 
-### Observer — milestone status and team-spot notifications
+### Observer — list status and share-spot notifications
 
 ```
-services/events.py        → DeadlineSubject(ABC), DeadlineObserver(ABC)
-                          → EventBus (implements DeadlineSubject)
-                          → MilestoneStatusChangedEvent, TeamSpotAvailableEvent
-services/notification.py  → StudentNotifier (implements DeadlineObserver)
+services/events.py        → ListSubject(ABC), ListObserver(ABC)
+                          → EventBus (implements ListSubject)
+                          → ListStatusChangedEvent, ListSpotAvailableEvent
+services/notification.py  → UserNotifier (implements ListObserver)
 ```
 
-`MilestoneService` publishes `MilestoneStatusChangedEvent` after every status change.
-`TeamService` publishes `TeamSpotAvailableEvent` after a member leaves. `StudentNotifier`
-reacts by recording `Notification` objects — services have no knowledge of what happens
-next (Open/Closed in action).
+`ListService` publishes `ListStatusChangedEvent` after every status change.
+`ShareService` publishes `ListSpotAvailableEvent` after a user leaves a shared list.
+`UserNotifier` reacts by recording `Notification` objects — services have no knowledge
+of what happens next (Open/Closed in action).
 
 ---
 
@@ -173,7 +173,7 @@ next (Open/Closed in action).
 ```
 services  →  storage interfaces (ABC)  ←  storage implementations
 services  →  models
-services  →  utils (exceptions, events, penalty_strategies)
+services  →  utils (exceptions, events, sorting_strategies)
 storage   →  models
 utils     →  (nothing in src)
 ```
