@@ -31,7 +31,7 @@ Shopping List App is a course project that demonstrates **clean architecture**, 
 
 - All state lives in **plain Python dicts/lists** (in-memory) or **JSON files** — no databases, no HTTP.
 - Every dependency is **constructor-injected** — services never import concrete repos.
-- 308 tests with **100 % branch coverage** enforce every rule at every layer.
+- 314 tests with **100 % branch coverage** enforce every rule at every layer.
 
 ---
 
